@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"time"
 
 	ghErrors "github.com/github/github-mcp-server/pkg/errors"
 	"github.com/github/github-mcp-server/pkg/utils"
@@ -43,6 +44,7 @@ func searchHandler(
 	args map[string]any,
 	searchType string,
 	errorPrefix string,
+	timeMasking *TimeMaskingState,
 ) (*mcp.CallToolResult, error) {
 	query, err := RequiredParam[string](args, "query")
 	if err != nil {
@@ -88,6 +90,13 @@ func searchHandler(
 			Page:    pagination.Page,
 			PerPage: pagination.PerPage,
 		},
+	}
+
+	// Time travel: restrict search results to items created before the cutoff
+	if timeMasking != nil {
+		if cutoff := timeMasking.GetCutoff(); cutoff != nil {
+			query = fmt.Sprintf("%s created:<%s", query, cutoff.Format(time.RFC3339))
+		}
 	}
 
 	client, err := getClient(ctx)

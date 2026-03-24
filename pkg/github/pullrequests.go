@@ -99,19 +99,18 @@ Possible options:
 				return utils.NewToolResultErrorFromErr("failed to get GitHub client", err), nil, nil
 			}
 
+			var result *mcp.CallToolResult
+			var handlerErr error
+
 			switch method {
 			case "get":
-				result, err := GetPullRequest(ctx, client, deps, owner, repo, pullNumber)
-				return result, nil, err
+				result, handlerErr = GetPullRequest(ctx, client, deps, owner, repo, pullNumber)
 			case "get_diff":
-				result, err := GetPullRequestDiff(ctx, client, owner, repo, pullNumber)
-				return result, nil, err
+				result, handlerErr = GetPullRequestDiff(ctx, client, owner, repo, pullNumber)
 			case "get_status":
-				result, err := GetPullRequestStatus(ctx, client, owner, repo, pullNumber)
-				return result, nil, err
+				result, handlerErr = GetPullRequestStatus(ctx, client, owner, repo, pullNumber)
 			case "get_files":
-				result, err := GetPullRequestFiles(ctx, client, owner, repo, pullNumber, pagination)
-				return result, nil, err
+				result, handlerErr = GetPullRequestFiles(ctx, client, owner, repo, pullNumber, pagination)
 			case "get_review_comments":
 				gqlClient, err := deps.GetGQLClient(ctx)
 				if err != nil {
@@ -121,20 +120,21 @@ Possible options:
 				if err != nil {
 					return utils.NewToolResultError(err.Error()), nil, nil
 				}
-				result, err := GetPullRequestReviewComments(ctx, gqlClient, deps, owner, repo, pullNumber, cursorPagination)
-				return result, nil, err
+				result, handlerErr = GetPullRequestReviewComments(ctx, gqlClient, deps, owner, repo, pullNumber, cursorPagination)
 			case "get_reviews":
-				result, err := GetPullRequestReviews(ctx, client, deps, owner, repo, pullNumber)
-				return result, nil, err
+				result, handlerErr = GetPullRequestReviews(ctx, client, deps, owner, repo, pullNumber)
 			case "get_comments":
-				result, err := GetIssueComments(ctx, client, deps, owner, repo, pullNumber, pagination)
-				return result, nil, err
+				result, handlerErr = GetIssueComments(ctx, client, deps, owner, repo, pullNumber, pagination)
 			case "get_check_runs":
-				result, err := GetPullRequestCheckRuns(ctx, client, owner, repo, pullNumber, pagination)
-				return result, nil, err
+				result, handlerErr = GetPullRequestCheckRuns(ctx, client, owner, repo, pullNumber, pagination)
 			default:
 				return utils.NewToolResultError(fmt.Sprintf("unknown method: %s", method)), nil, nil
 			}
+
+			if handlerErr == nil {
+				result = ApplyTimeMaskingToResult(result, deps, method, prStateMaskFields)
+			}
+			return result, nil, handlerErr
 		})
 }
 
@@ -1399,7 +1399,7 @@ func SearchPullRequests(t translations.TranslationHelperFunc) inventory.ServerTo
 		},
 		[]scopes.Scope{scopes.Repo},
 		func(ctx context.Context, deps ToolDependencies, _ *mcp.CallToolRequest, args map[string]any) (*mcp.CallToolResult, any, error) {
-			result, err := searchHandler(ctx, deps.GetClient, args, "pr", "failed to search pull requests")
+			result, err := searchHandler(ctx, deps.GetClient, args, "pr", "failed to search pull requests", deps.GetTimeMasking())
 			return result, nil, err
 		})
 }

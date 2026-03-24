@@ -32,3 +32,6 @@ ui/node_modules/
 pkg/github/ui_dist/*
 !pkg/github/ui_dist/.gitkeep
 !pkg/github/ui_dist/.placeholder.html
+
+# Environment variables
+.env

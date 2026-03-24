@@ -280,22 +280,26 @@ Options are:
 				return utils.NewToolResultErrorFromErr("failed to get GitHub graphql client", err), nil, nil
 			}
 
+			var result *mcp.CallToolResult
+			var handlerErr error
+
 			switch method {
 			case "get":
-				result, err := GetIssue(ctx, client, deps, owner, repo, issueNumber)
-				return result, nil, err
+				result, handlerErr = GetIssue(ctx, client, deps, owner, repo, issueNumber)
 			case "get_comments":
-				result, err := GetIssueComments(ctx, client, deps, owner, repo, issueNumber, pagination)
-				return result, nil, err
+				result, handlerErr = GetIssueComments(ctx, client, deps, owner, repo, issueNumber, pagination)
 			case "get_sub_issues":
-				result, err := GetSubIssues(ctx, client, deps, owner, repo, issueNumber, pagination)
-				return result, nil, err
+				result, handlerErr = GetSubIssues(ctx, client, deps, owner, repo, issueNumber, pagination)
 			case "get_labels":
-				result, err := GetIssueLabels(ctx, gqlClient, owner, repo, issueNumber)
-				return result, nil, err
+				result, handlerErr = GetIssueLabels(ctx, gqlClient, owner, repo, issueNumber)
 			default:
 				return utils.NewToolResultError(fmt.Sprintf("unknown method: %s", method)), nil, nil
 			}
+
+			if handlerErr == nil {
+				result = ApplyTimeMaskingToResult(result, deps, method, issueStateMaskFields)
+			}
+			return result, nil, handlerErr
 		})
 }
 
@@ -960,7 +964,7 @@ func SearchIssues(t translations.TranslationHelperFunc) inventory.ServerTool {
 		},
 		[]scopes.Scope{scopes.Repo},
 		func(ctx context.Context, deps ToolDependencies, _ *mcp.CallToolRequest, args map[string]any) (*mcp.CallToolResult, any, error) {
-			result, err := searchHandler(ctx, deps.GetClient, args, "issue", "failed to search issues")
+			result, err := searchHandler(ctx, deps.GetClient, args, "issue", "failed to search issues", deps.GetTimeMasking())
 			return result, nil, err
 		})
 }

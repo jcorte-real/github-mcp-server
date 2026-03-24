@@ -1,0 +1,20 @@
+{
+  "annotations": {
+    "readOnlyHint": true,
+    "title": "Set time travel cutoff"
+  },
+  "description": "Set or clear a time-travel cutoff for regression testing. When active, all tools return only data that existed at or before the cutoff timestamp. Write operations are blocked. Pass an empty cutoff string to disable.",
+  "inputSchema": {
+    "properties": {
+      "cutoff": {
+        "description": "ISO 8601 timestamp to travel to (e.g. '2024-01-15T10:30:00Z'). Empty string disables time travel.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "cutoff"
+    ],
+    "type": "object"
+  },
+  "name": "set_time_travel"
+}

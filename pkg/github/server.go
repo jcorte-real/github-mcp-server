@@ -125,6 +125,12 @@ func NewMCPServer(ctx context.Context, cfg *MCPServerConfig, deps ToolDependenci
 		registerDynamicTools(ghServer, inv, deps, cfg.Translator)
 	}
 
+	// Register time travel tool for regression testing (always available, not part of any toolset)
+	if tm := deps.GetTimeMasking(); tm != nil {
+		timeTravelTool := SetTimeTravel(cfg.Translator, tm)
+		ghServer.AddTool(&timeTravelTool, SetTimeTravelHandler(tm))
+	}
+
 	return ghServer, nil
 }
 

@@ -105,6 +105,23 @@ func GetRepositoryTree(t translations.TranslationHelperFunc) inventory.ServerToo
 				return utils.NewToolResultError("failed to get GitHub client"), nil, nil
 			}
 
+			// Time travel: resolve historical tree SHA when active and no explicit tree_sha provided
+			if treeSHA == "" {
+				if tm := deps.GetTimeMasking(); tm != nil {
+					if tm.GetCutoff() != nil {
+						historicalSHA, resolveErr := tm.GetOrResolveSHA(ctx, client, owner, repo)
+						if resolveErr != nil {
+							return utils.NewToolResultError(fmt.Sprintf("time travel SHA resolution failed: %s", resolveErr)), nil, nil
+						}
+						commit, _, commitErr := client.Git.GetCommit(ctx, owner, repo, historicalSHA)
+						if commitErr != nil {
+							return utils.NewToolResultError(fmt.Sprintf("time travel: failed to get commit %s: %s", historicalSHA, commitErr)), nil, nil
+						}
+						treeSHA = commit.GetTree().GetSHA()
+					}
+				}
+			}
+
 			// If no tree_sha is provided, use the repository's default branch
 			if treeSHA == "" {
 				repoInfo, repoResp, err := client.Repositories.Get(ctx, owner, repo)

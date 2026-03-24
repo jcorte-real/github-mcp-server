@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	ghErrors "github.com/github/github-mcp-server/pkg/errors"
 	"github.com/github/github-mcp-server/pkg/inventory"
@@ -86,6 +87,13 @@ func SearchRepositories(t translations.TranslationHelperFunc) inventory.ServerTo
 					Page:    pagination.Page,
 					PerPage: pagination.PerPage,
 				},
+			}
+
+			// Time travel: restrict search results to repos created before the cutoff
+			if tm := deps.GetTimeMasking(); tm != nil {
+				if cutoff := tm.GetCutoff(); cutoff != nil {
+					query = fmt.Sprintf("%s created:<%s", query, cutoff.Format(time.RFC3339))
+				}
 			}
 
 			client, err := deps.GetClient(ctx)

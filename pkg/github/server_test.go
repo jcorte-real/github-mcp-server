@@ -60,6 +60,7 @@ func (s stubDeps) GetT() translations.TranslationHelperFunc          { return s.
 func (s stubDeps) GetFlags(_ context.Context) FeatureFlags           { return s.flags }
 func (s stubDeps) GetContentWindowSize() int                         { return s.contentWindowSize }
 func (s stubDeps) IsFeatureEnabled(_ context.Context, _ string) bool { return false }
+func (s stubDeps) GetTimeMasking() *TimeMaskingState                 { return nil }
 
 // Helper functions to create stub client functions for error testing
 func stubClientFnFromHTTP(httpClient *http.Client) func(context.Context) (*gogithub.Client, error) {

@@ -94,6 +94,10 @@ type ToolDependencies interface {
 
 	// IsFeatureEnabled checks if a feature flag is enabled.
 	IsFeatureEnabled(ctx context.Context, flagName string) bool
+
+	// GetTimeMasking returns the time-masking state for regression testing.
+	// Returns nil if time masking is not configured.
+	GetTimeMasking() *TimeMaskingState
 }
 
 // BaseDeps is the standard implementation of ToolDependencies for the local server.
@@ -113,6 +117,9 @@ type BaseDeps struct {
 
 	// Feature flag checker for runtime checks
 	featureChecker inventory.FeatureFlagChecker
+
+	// TimeMasking holds the time-travel state for regression testing
+	TimeMasking *TimeMaskingState
 }
 
 // Compile-time assertion to verify that BaseDeps implements the ToolDependencies interface.
@@ -188,6 +195,9 @@ func (d BaseDeps) IsFeatureEnabled(ctx context.Context, flagName string) bool {
 	return enabled
 }
 
+// GetTimeMasking implements ToolDependencies.
+func (d BaseDeps) GetTimeMasking() *TimeMaskingState { return d.TimeMasking }
+
 // NewTool creates a ServerTool that retrieves ToolDependencies from context at call time.
 // This avoids creating closures at registration time, which is important for performance
 // in servers that create a new server instance per request (like the remote server).
@@ -206,7 +216,34 @@ func NewTool[In, Out any](
 ) inventory.ServerTool {
 	st := inventory.NewServerToolWithContextHandler(tool, toolset, func(ctx context.Context, req *mcp.CallToolRequest, args In) (*mcp.CallToolResult, Out, error) {
 		deps := MustDepsFromContext(ctx)
-		return handler(ctx, deps, req, args)
+
+		// Time travel: block write tools
+		if IsWriteBlocked(tool, deps.GetTimeMasking()) {
+			var zero Out
+			return utils.NewToolResultError("write operations are blocked during time travel"), zero, nil
+		}
+
+		result, out, err := handler(ctx, deps, req, args)
+
+		// Time travel: apply post-handler response filtering
+		if result != nil && err == nil {
+			if tm := deps.GetTimeMasking(); tm != nil {
+				if cutoff := tm.GetCutoff(); cutoff != nil {
+					if filterCfg, ok := toolTimeFilters[tool.Name]; ok {
+						if filtered := FilterResponseByTime(result, *cutoff, filterCfg); filtered != nil {
+							result = filtered
+						}
+					}
+					if tsPath, ok := toolExistenceChecks[tool.Name]; ok {
+						if blocked := CheckExistence(result, *cutoff, tsPath); blocked != nil {
+							result = blocked
+						}
+					}
+				}
+			}
+		}
+
+		return result, out, err
 	})
 	st.RequiredScopes = scopes.ToStringSlice(requiredScopes...)
 	st.AcceptedScopes = scopes.ExpandScopes(requiredScopes...)
@@ -229,7 +266,33 @@ func NewToolFromHandler(
 ) inventory.ServerTool {
 	st := inventory.NewServerToolWithRawContextHandler(tool, toolset, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		deps := MustDepsFromContext(ctx)
-		return handler(ctx, deps, req)
+
+		// Time travel: block write tools
+		if IsWriteBlocked(tool, deps.GetTimeMasking()) {
+			return utils.NewToolResultError("write operations are blocked during time travel"), nil
+		}
+
+		result, err := handler(ctx, deps, req)
+
+		// Time travel: apply post-handler response filtering
+		if result != nil && err == nil {
+			if tm := deps.GetTimeMasking(); tm != nil {
+				if cutoff := tm.GetCutoff(); cutoff != nil {
+					if filterCfg, ok := toolTimeFilters[tool.Name]; ok {
+						if filtered := FilterResponseByTime(result, *cutoff, filterCfg); filtered != nil {
+							result = filtered
+						}
+					}
+					if tsPath, ok := toolExistenceChecks[tool.Name]; ok {
+						if blocked := CheckExistence(result, *cutoff, tsPath); blocked != nil {
+							result = blocked
+						}
+					}
+				}
+			}
+		}
+
+		return result, err
 	})
 	st.RequiredScopes = scopes.ToStringSlice(requiredScopes...)
 	st.AcceptedScopes = scopes.ExpandScopes(requiredScopes...)
@@ -389,3 +452,7 @@ func (d *RequestDeps) IsFeatureEnabled(ctx context.Context, flagName string) boo
 
 	return enabled
 }
+
+// GetTimeMasking implements ToolDependencies.
+// RequestDeps does not support time masking (returns nil).
+func (d *RequestDeps) GetTimeMasking() *TimeMaskingState { return nil }

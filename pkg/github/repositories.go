@@ -187,6 +187,13 @@ func ListCommits(t translations.TranslationHelperFunc) inventory.ServerTool {
 				},
 			}
 
+			// Time travel: restrict commits to those before the cutoff
+			if tm := deps.GetTimeMasking(); tm != nil {
+				if cutoff := tm.GetCutoff(); cutoff != nil {
+					opts.Until = *cutoff
+				}
+			}
+
 			client, err := deps.GetClient(ctx)
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to get GitHub client: %w", err)
@@ -684,6 +691,19 @@ func GetFileContents(t translations.TranslationHelperFunc) inventory.ServerTool 
 			client, err := deps.GetClient(ctx)
 			if err != nil {
 				return utils.NewToolResultError("failed to get GitHub client"), nil, nil
+			}
+
+			// Time travel: override SHA with historical commit when active and no explicit SHA provided
+			if sha == "" {
+				if tm := deps.GetTimeMasking(); tm != nil {
+					if tm.GetCutoff() != nil {
+						historicalSHA, resolveErr := tm.GetOrResolveSHA(ctx, client, owner, repo)
+						if resolveErr != nil {
+							return utils.NewToolResultError(fmt.Sprintf("time travel SHA resolution failed: %s", resolveErr)), nil, nil
+						}
+						sha = historicalSHA
+					}
+				}
 			}
 
 			rawOpts, fallbackUsed, err := resolveGitReference(ctx, client, owner, repo, ref, sha)
