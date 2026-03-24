@@ -129,6 +129,7 @@ func NewStdioMCPServer(ctx context.Context, cfg github.MCPServerConfig) (*mcp.Se
 		cfg.ContentWindowSize,
 		featureChecker,
 	)
+	deps.TimeMasking = github.NewTimeMaskingState()
 	// Build and register the tool/resource/prompt inventory
 	inventoryBuilder := github.NewInventory(cfg.Translator).
 		WithDeprecatedAliases(github.DeprecatedToolAliases).
